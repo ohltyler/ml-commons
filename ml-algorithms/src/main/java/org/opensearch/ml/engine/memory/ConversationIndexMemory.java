@@ -5,8 +5,8 @@
 
 package org.opensearch.ml.engine.memory;
 
-import lombok.Getter;
-import lombok.extern.log4j.Log4j2;
+import java.io.IOException;
+
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.client.Client;
@@ -22,7 +22,8 @@ import org.opensearch.ml.common.spi.memory.Message;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.sort.SortOrder;
 
-import java.io.IOException;
+import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 
 @Log4j2
 public class ConversationIndexMemory implements Memory {
@@ -44,9 +45,7 @@ public class ConversationIndexMemory implements Memory {
 
     @Override
     public void save(String id, Message message) {
-        this.save(id, message, ActionListener.wrap(r -> {
-            log.info("saved message into {} memory, session id: {}", TYPE, id);
-        }, e-> {
+        this.save(id, message, ActionListener.wrap(r -> { log.info("saved message into {} memory, session id: {}", TYPE, id); }, e -> {
             log.error("Failed to save message to memory", e);
         }));
     }
@@ -55,7 +54,7 @@ public class ConversationIndexMemory implements Memory {
     public void save(String id, Message message, ActionListener listener) {
         IndexRequest indexRequest = new IndexRequest(indexName);
         try {
-            ConversationIndexMessage conversationIndexMessage = (ConversationIndexMessage)message;
+            ConversationIndexMessage conversationIndexMessage = (ConversationIndexMessage) message;
             XContentBuilder builder = XContentBuilder.builder(XContentType.JSON.xContent());
             conversationIndexMessage.toXContent(builder, ToXContent.EMPTY_PARAMS);
             indexRequest.source(builder);
@@ -88,11 +87,9 @@ public class ConversationIndexMemory implements Memory {
     }
 
     @Override
-    public void clear() {
-    }
+    public void clear() {}
 
     @Override
-    public void remove(String id) {
-    }
+    public void remove(String id) {}
 
 }

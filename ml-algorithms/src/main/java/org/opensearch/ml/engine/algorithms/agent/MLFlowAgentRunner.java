@@ -5,9 +5,16 @@
 
 package org.opensearch.ml.engine.algorithms.agent;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import static org.apache.commons.text.StringEscapeUtils.escapeJson;
+import static org.opensearch.ml.common.utils.StringUtils.gson;
+
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.commons.text.StringSubstitutor;
 import org.opensearch.action.StepListener;
 import org.opensearch.client.Client;
@@ -22,15 +29,9 @@ import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.ml.common.spi.memory.Memory;
 import org.opensearch.ml.common.spi.tools.Tool;
 
-import java.security.AccessController;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.apache.commons.text.StringEscapeUtils.escapeJson;
-import static org.opensearch.ml.common.utils.StringUtils.gson;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 @Log4j2
 @Data
@@ -44,7 +45,14 @@ public class MLFlowAgentRunner {
     private Map<String, Tool.Factory> toolFactories;
     private Map<String, Memory> memoryMap;
 
-    public MLFlowAgentRunner(Client client, Settings settings, ClusterService clusterService, NamedXContentRegistry xContentRegistry, Map<String, Tool.Factory> toolFactories, Map<String, Memory> memoryMap) {
+    public MLFlowAgentRunner(
+        Client client,
+        Settings settings,
+        ClusterService clusterService,
+        NamedXContentRegistry xContentRegistry,
+        Map<String, Tool.Factory> toolFactories,
+        Map<String, Memory> memoryMap
+    ) {
         this.client = client;
         this.settings = settings;
         this.clusterService = clusterService;
@@ -63,7 +71,7 @@ public class MLFlowAgentRunner {
             listener.onFailure(new IllegalArgumentException("no tool configured"));
             return;
         }
-        for (int i = 0 ;i<toolSpecs.size(); i++) {
+        for (int i = 0; i < toolSpecs.size(); i++) {
             MLToolSpec toolSpec = toolSpecs.get(i);
             Tool tool = createTool(toolSpec);
             if (i == 0) {
@@ -77,7 +85,7 @@ public class MLFlowAgentRunner {
                 int finalI = i;
                 lastStepListener.whenComplete(output -> {
                     String outputKey = lastToolSpec.getName() + ".output";
-                    if (lastToolSpec.getName() !=  null) {
+                    if (lastToolSpec.getName() != null) {
                         outputKey = lastToolSpec.getName() + ".output";
                     }
                     if (output instanceof List && !((List) output).isEmpty() && ((List) output).get(0) instanceof ModelTensors) {
@@ -85,10 +93,10 @@ public class MLFlowAgentRunner {
                         Object response = tensors.getMlModelTensors().get(0).getDataAsMap().get("response");
                         params.put(outputKey, response + "");
                     } else if (output instanceof ModelTensor) {
-                        params.put(outputKey, escapeJson(toJson(((ModelTensor)output).getDataAsMap())));
+                        params.put(outputKey, escapeJson(toJson(((ModelTensor) output).getDataAsMap())));
                     } else {
                         if (output instanceof String) {
-                            params.put(outputKey, (String)output);
+                            params.put(outputKey, (String) output);
                         } else {
                             params.put(outputKey, escapeJson(toJson(output.toString())));
                         }
@@ -103,7 +111,7 @@ public class MLFlowAgentRunner {
                     listener.onFailure(e);
                 });
                 if (i < toolSpecs.size() - 1) {
-                    lastStepListener  = nextStepListener;
+                    lastStepListener = nextStepListener;
                 }
             }
         }
@@ -118,7 +126,7 @@ public class MLFlowAgentRunner {
         try {
             return AccessController.doPrivileged((PrivilegedExceptionAction<String>) () -> {
                 if (value instanceof String) {
-                    return (String)value;
+                    return (String) value;
                 } else {
                     return gson.toJson(value);
                 }
@@ -153,10 +161,10 @@ public class MLFlowAgentRunner {
         for (String key : params.keySet()) {
             String toBeReplaced = null;
             if (key.startsWith(toolSpec.getName() + ".")) {
-                toBeReplaced = toolSpec.getName()+".";
+                toBeReplaced = toolSpec.getName() + ".";
             }
             if (toolSpec.getName() != null && key.startsWith(toolSpec.getName() + ".")) {
-                toBeReplaced = toolSpec.getName()+".";
+                toBeReplaced = toolSpec.getName() + ".";
             }
             if (toBeReplaced != null) {
                 executeParams.put(key.replace(toBeReplaced, ""), params.get(key));
