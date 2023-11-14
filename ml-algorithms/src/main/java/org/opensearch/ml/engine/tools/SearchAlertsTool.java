@@ -25,9 +25,7 @@ import org.opensearch.ml.common.spi.tools.ToolAnnotation;
 
 import lombok.Getter;
 import lombok.Setter;
-import lombok.extern.log4j.Log4j2;
 
-@Log4j2
 @ToolAnnotation(SearchAlertsTool.NAME)
 public class SearchAlertsTool implements Tool {
     public static final String NAME = "SearchAlertsTool";
@@ -116,7 +114,7 @@ public class SearchAlertsTool implements Tool {
 
     @Override
     public boolean validate(Map<String, String> parameters) {
-        if (parameters == null || parameters.size() == 0) {
+        if (parameters == null) {
             return false;
         }
         return true;
