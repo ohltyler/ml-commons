@@ -125,3 +125,4 @@ publishing {
 }
 compileJava.dependsOn(':opensearch-ml-common:shadowJar')
 delombok.dependsOn(':opensearch-ml-common:shadowJar')
+publishShadowPublicationToMavenLocal.dependsOn(':opensearch-ml-common:shadowJar')
