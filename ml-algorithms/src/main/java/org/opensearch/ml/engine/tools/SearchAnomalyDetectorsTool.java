@@ -10,22 +10,18 @@ import java.util.List;
 import java.util.Map;
 
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
+import org.opensearch.ad.client.AnomalyDetectionNodeClient;
 import org.opensearch.client.Client;
-import org.opensearch.client.node.NodeClient;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.ExistsQueryBuilder;
-import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.RangeQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.WildcardQueryBuilder;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.ml.common.spi.tools.Parser;
 import org.opensearch.ml.common.spi.tools.Tool;
 import org.opensearch.ml.common.spi.tools.ToolAnnotation;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.search.SearchHit;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.sort.SortOrder;
 
@@ -49,6 +45,9 @@ public class SearchAnomalyDetectorsTool implements Tool {
     private String version;
 
     private Client client;
+
+    private AnomalyDetectionNodeClient adClient;
+
     @Setter
     private Parser<?, ?> inputParser;
     @Setter
@@ -68,56 +67,44 @@ public class SearchAnomalyDetectorsTool implements Tool {
         };
     }
 
-    // TODO: finish logic in run()
     // Response is currently in a simple string format including the list of anomaly detectors (only name and ID attached), and
     // number of total detectors. The output will likely need to be updated, standardized, and include more fields in the
     // future to cover a sufficient amount of potential questions the agent will need to handle.
     @Override
     public <T> void run(Map<String, String> parameters, ActionListener<T> listener) {
-        final String detectorName = parameters.getOrDefault("monitorName", null);
+        final String detectorName = parameters.getOrDefault("detectorName", null);
         final String detectorNamePattern = parameters.getOrDefault("detectorNamePattern", null);
         final String indices = parameters.getOrDefault("indices", null);
-        final Boolean highCardinality = parameters.containsKey("highCardinality") ? Boolean.parseBoolean(parameters.get("highCardinality")) : null;
+        final Boolean highCardinality = parameters.containsKey("highCardinality")
+            ? Boolean.parseBoolean(parameters.get("highCardinality"))
+            : null;
         final Long lastUpdateTime = parameters.getOrDefault("lastUpdateTime", null);
         final String sortOrderStr = parameters.getOrDefault("sortOrder", "asc");
         final SortOrder sortOrder = sortOrderStr == "asc" ? SortOrder.ASC : SortOrder.DESC;
-        final String sortString = parameters.getOrDefault("sortString", "monitor.name.keyword");
+        final String sortString = parameters.getOrDefault("sortString", "name.keyword");
         final int size = parameters.containsKey("size") ? Integer.parseInt(parameters.get("size")) : 20;
         final int startIndex = parameters.containsKey("startIndex") ? Integer.parseInt(parameters.get("startIndex")) : 0;
         final Boolean running = parameters.containsKey("running") ? Boolean.parseBoolean(parameters.get("running")) : null;
         final Boolean disabled = parameters.containsKey("disabled") ? Boolean.parseBoolean(parameters.get("disabled")) : null;
         final Boolean failed = parameters.containsKey("failed") ? Boolean.parseBoolean(parameters.get("failed")) : null;
 
-        // List<QueryBuilder> mustList = new ArrayList<QueryBuilder>();
-        // if (monitorName != null) {
-        //     mustList.add(new TermQueryBuilder("monitor.name.keyword", monitorName));
-        // }
-        // if (monitorNamePattern != null) {
-        //     mustList.add(new WildcardQueryBuilder("monitor.name.keyword", monitorNamePattern));
-        // }
-        // if (enabled != null) {
-        //     mustList.add(new TermQueryBuilder("monitor.enabled", enabled));
-        // }
-        // if (hasTriggers != null) {
-        //     NestedQueryBuilder nestedTriggerQuery = new NestedQueryBuilder(
-        //         "monitor.triggers",
-        //         new ExistsQueryBuilder("monitor.triggers"),
-        //         null
-        //     );
-        //     BoolQueryBuilder triggerQuery = new BoolQueryBuilder();
-        //     if (hasTriggers) {
-        //         triggerQuery.must(nestedTriggerQuery);
-        //     } else {
-        //         triggerQuery.mustNot(nestedTriggerQuery);
-        //     }
-        //     mustList.add(triggerQuery);
-        // }
-        // if (indices != null) {
-        //     mustList
-        //         .add(
-        //             new NestedQueryBuilder("monitor.inputs", new WildcardQueryBuilder("monitor.inputs.search.indices", indices), null)
-        //         );
-        // }
+        List<QueryBuilder> mustList = new ArrayList<QueryBuilder>();
+        if (detectorName != null) {
+            mustList.add(new TermQueryBuilder("name.keyword", detectorName));
+        }
+        if (detectorNamePattern != null) {
+            mustList.add(new WildcardQueryBuilder("name.keyword", detectorNamePattern));
+        }
+        if (indices != null) {
+            mustList.add(new TermQueryBuilder("indices", indices));
+        }
+        if (highCardinality != null) {
+            mustList.add(new TermQueryBuilder("detector_type", highCardinality ? "MULTI_ENTITY" : "SINGLE_ENTITY"));
+        }
+        if (lastUpdateTime != null) {
+            mustList.add(new BoolQueryBuilder().filter(new RangeQueryBuilder("last_update_time").gte(lastUpdateTime)));
+
+        }
 
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         boolQueryBuilder.must().addAll(mustList);
@@ -127,12 +114,18 @@ public class SearchAnomalyDetectorsTool implements Tool {
             .from(startIndex)
             .sort(sortString, sortOrder);
 
-        SearchMonitorRequest searchMonitorRequest = new SearchMonitorRequest(new SearchRequest().source(searchSourceBuilder));
+        SearchRequest searchDetectorRequest = new SearchRequest().source(searchSourceBuilder);
 
-        ActionListener<SearchResponse> searchMonitorListener = ActionListener.<SearchResponse>wrap(response -> {
+        if (running != null || disabled != null || failed != null) {
+            // TODO: add a listener to trigger when the first response is received, to trigger the profile API call
+            // to fetch the detector state, etc.
+            // Will need AD client to onboard the profile API first.
+        }
+
+        ActionListener<SearchResponse> searchDetectorListener = ActionListener.<SearchResponse>wrap(response -> {
             StringBuilder sb = new StringBuilder();
             SearchHit[] hits = response.getHits().getHits();
-            sb.append("Monitors=[");
+            sb.append("AnomalyDetectors=[");
             for (SearchHit hit : hits) {
                 sb.append("{");
                 sb.append("id=").append(hit.getId()).append(",");
@@ -140,11 +133,11 @@ public class SearchAnomalyDetectorsTool implements Tool {
                 sb.append("}");
             }
             sb.append("]");
-            sb.append("TotalMonitors=").append(response.getHits().getTotalHits().value);
+            sb.append("TotalAnomalyDetectors=").append(response.getHits().getTotalHits().value);
             listener.onResponse((T) sb.toString());
         }, e -> { listener.onFailure(e); });
-        AlertingPluginInterface.INSTANCE.SearchAnomalyDetectors((NodeClient) client, searchMonitorRequest, searchMonitorListener);
-        
+
+        adClient.searchAnomalyDetectors(searchDetectorRequest, searchDetectorListener);
     }
 
     @Override
@@ -187,6 +180,7 @@ public class SearchAnomalyDetectorsTool implements Tool {
          */
         public void init(Client client) {
             this.client = client;
+            this.adClient = new AnomalyDetectionNodeClient(client);
         }
 
         @Override
