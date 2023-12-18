@@ -52,6 +52,7 @@ dependencies {
         exclude group: "com.microsoft.onnxruntime", module: "onnxruntime"
     }
     compileOnly "org.jetbrains.kotlin:kotlin-stdlib:${kotlin_version}"
+    api group: 'org.opensearch', name:'opensearch-ad-client', version: "${common_utils_version}"
 
     def os = DefaultNativePlatform.currentOperatingSystem
     //mac doesn't support GPU
